@@ -1,115 +1,266 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_chatgpt_clone/apikey.dart';
+import 'dart:convert';
+import 'colors.dart';
+import 'models.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      home: ChatPage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class ChatPage extends StatefulWidget {
+  const ChatPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+Future<String> generateResponse(String prompt) async {
+  const apiKey = apiSerectKey;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  var url = Uri.https("api.openai.com", "/v1/completions");
+  final response = await http.post(
+    url,
+    headers: {
+      'Content-Type': 'application/json',
+      "Authorization": "Bearer $apiKey"
+    },
+    body: json.encode({
+      "model": "text-davinci-003",
+      "prompt": prompt,
+      'temperature': 0,
+      'max_tokens': 2000,
+      'top_p': 1,
+      'frequency_penalty': 0.0,
+      'presence_penalty': 0.0,
+    }),
+  );
+
+  Map<String, dynamic> newresponse = jsonDecode(response.body);
+
+  return newresponse['choices'][0]['text'];
+}
+
+class _ChatPageState extends State<ChatPage> {
+  final _textController = TextEditingController();
+  final _scrollController = ScrollController();
+  final List<ChatMessage> _messages = [];
+  late bool isLoading;
+
+  @override
+  void initState() {
+    super.initState();
+    isLoading = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        toolbarHeight: 75,
+        title: const Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Text(
+            "OpenAI's ChatGPT Flutter",
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 35),
+          ),
+        ),
+        backgroundColor: botBackgroundColor,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      backgroundColor: backgroundColor,
+      body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          children: [
+            Expanded(
+              child: _buildList(),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+            Visibility(
+              visible: isLoading,
+              child: const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(
+                  color: white,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  _buildInput(),
+                  _buildSubmit(),
+                ],
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  Widget _buildSubmit() {
+    return Visibility(
+      visible: !isLoading,
+      child: Container(
+        color: botBackgroundColor,
+        child: IconButton(
+          icon: const Icon(
+            Icons.send_rounded,
+            color: Color.fromRGBO(142, 142, 160, 1),
+          ),
+          onPressed: () async {
+            setState(
+              () {
+                _messages.add(
+                  ChatMessage(
+                    text: _textController.text,
+                    chatMessageType: ChatMessageType.user,
+                  ),
+                );
+                isLoading = true;
+              },
+            );
+            var input = _textController.text;
+            _textController.clear();
+            Future.delayed(const Duration(milliseconds: 50))
+                .then((_) => _scrollDown());
+            generateResponse(input).then((value) {
+              setState(() {
+                isLoading = false;
+                _messages.add(
+                  ChatMessage(
+                    text: value,
+                    chatMessageType: ChatMessageType.bot,
+                  ),
+                );
+              });
+            });
+            _textController.clear();
+            Future.delayed(const Duration(milliseconds: 50))
+                .then((_) => _scrollDown());
+          },
+        ),
+      ),
+    );
+  }
+
+  Expanded _buildInput() {
+    return Expanded(
+      child: TextField(
+        textCapitalization: TextCapitalization.sentences,
+        style: const TextStyle(color: white),
+        controller: _textController,
+        decoration: const InputDecoration(
+          fillColor: botBackgroundColor,
+          filled: true,
+          border: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+        ),
+      ),
+    );
+  }
+
+  ListView _buildList() {
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _messages.length,
+      itemBuilder: (context, index) {
+        var message = _messages[index];
+        return ChatMessageWidget(
+          text: message.text,
+          chatMessageType: message.chatMessageType,
+        );
+      },
+    );
+  }
+
+  void _scrollDown() {
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+}
+
+class ChatMessageWidget extends StatelessWidget {
+  const ChatMessageWidget(
+      {super.key, required this.text, required this.chatMessageType});
+
+  final String text;
+  final ChatMessageType chatMessageType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10.0),
+      padding: const EdgeInsets.all(16),
+      color: chatMessageType == ChatMessageType.bot
+          ? botBackgroundColor
+          : backgroundColor,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          chatMessageType == ChatMessageType.bot
+              ? Container(
+                  margin: const EdgeInsets.only(right: 16.0),
+                  child: CircleAvatar(
+                    backgroundColor: const Color.fromRGBO(16, 163, 127, 1),
+                    child: Image.asset(
+                      'assets/bot.jpg',
+                      color: white,
+                      scale: 1.5,
+                    ),
+                  ),
+                )
+              : Container(
+                  margin: const EdgeInsets.only(right: 16.0),
+                  child: const CircleAvatar(
+                    child: Icon(
+                      Icons.person,
+                    ),
+                  ),
+                ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.all(8.0),
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                  ),
+                  child: Text(
+                    text,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(color: white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
